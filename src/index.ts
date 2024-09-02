@@ -3,8 +3,7 @@ import { RecursiveCharacterTextSplitter } from 'langchain/text_splitter';
 import { ChatCloudflareWorkersAI } from '@langchain/cloudflare';
 import { stream } from 'hono/streaming';
 import { YoutubeLoader } from '@langchain/community/document_loaders/web/youtube';
-import { loadSummarizationChain } from 'langchain/chains';
-import { loadQAStuffChain } from 'langchain/chains';
+import { loadQAMapReduceChain, loadSummarizationChain } from 'langchain/chains';
 import { PromptTemplate } from '@langchain/core/prompts';
 
 type Bindings = {
@@ -19,66 +18,37 @@ const app = new Hono<{ Bindings: Bindings }>();
 
 app.get('/', async (c) => {
 	const model = new ChatCloudflareWorkersAI({
-		model: '@hf/thebloke/llama-2-13b-chat-awq',
+		model: '@cf/meta/llama-3-8b-instruct',
 		cloudflareAccountId: c.env.CLOUDFLARE_ACCOUNT_ID,
 		cloudflareApiToken: c.env.CLOUDFLARE_API_KEY,
-		streaming: true
+		streaming: true,
 	});
-	const body = await c.req.json();
+	// const body = await c.req.json();
+	const body = {
+		"videoUrl" : "https://youtu.be/qaPMdcCqtWk?si=0UXbTlSXda8cLVSi"
+	}
 	try {
 		const loader = YoutubeLoader.createFromUrl(body.videoUrl);
 		const transcript = await loader.load();
 		const splitter = new RecursiveCharacterTextSplitter({
-			chunkSize: 5000,
-			chunkOverlap: 400
+			chunkSize: 7000,
+			chunkOverlap: 1000
 		});
 		let docs = await splitter.splitDocuments(transcript);
-		console.log(docs);
+		// console.log(docs);
+		const mapReduceChain = loadQAMapReduceChain(model);
 
-		const summaryTemplate = `
-You are an expert in summarizing YouTube videos.
-Your goal is to create a summary of a youtube video.
-Below you find the transcript of a video:
-{text};`
-		const SUMMARY_PROMPT = PromptTemplate.fromTemplate(summaryTemplate);
-
-		const summaryRefineTemplate = `
-You are an expert in summarizing YouTube videos.
-Your goal is to create a summary of a video.
-We have provided an existing summary up to a certain point: {existing_answer}
-
-Below you find the transcript of a video:
---------
-{text}
---------
-
-Given the new context, refine the summary. Provide the summary directly, without any introductory phrases. `;
-
-		const SUMMARY_REFINE_PROMPT = PromptTemplate.fromTemplate(
-			summaryRefineTemplate
-		);
-		const summarizeChain = loadSummarizationChain(model, {
-			type: "refine",
-			questionPrompt: SUMMARY_PROMPT,
-			refinePrompt: SUMMARY_REFINE_PROMPT,
+		const res = await mapReduceChain.invoke({
+			input_documents: docs,
+			question: "You are an expert in summarizing YouTube videos.Your goal is to create a summary of a video from the transcript provided. Provide a detailed bullet point summary."
 		});
 
-		return stream(c, async (stream) => {
-			stream.onAbort(() => {
-				console.log('Aborted!');
-			});
-			const chatstream = await summarizeChain.stream({input_documents: docs});
-			const reader = chatstream.getReader();
-			while (true) {
-				const { done, value } = await reader.read();
-				if (done) break;
-				console.log(value.output_text);
-				await stream.writeln(value?.output_text.toString());
-			}
+		//{
+		// 			input_documents: docs,
+		// 			question: " You are an expert in summarizing YouTube videos.Your goal is to create a summary of a video from the transcript provided. Provide a detailed summary."
+		// 		}
 
-			console.log('STREAM DONE');
-			// stream.pipe(chatStream);
-		});
+		return c.json({res});
 	} catch (e) {
 		console.log('error', e);
 		return c.json({ error: 'An error occurred during processing.' }, 500);
