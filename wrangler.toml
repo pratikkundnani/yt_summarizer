@@ -7,10 +7,13 @@ compatibility_flags = ["nodejs_compat"]
 binding = "AI"
 
 [vars]
-
 LANGCHAIN_TRACING_V2="true"
 LANGCHAIN_PROJECT="yt-summariser"
 LANGCHAIN_CALLBACKS_BACKGROUND=true
+
+[[kv_namespaces]]
+binding = "kv_store"
+id = "4182d24b9f324e6784ddab866eac22e6"
 
 
 # Automatically place your workloads in an optimal location to minimize latency.

@@ -12,8 +12,9 @@ type Bindings = {
 	CLOUDFLARE_API_KEY: string,
 	LANGCHAIN_API_KEY: string,
 	LANGCHAIN_PROJECT: string,
-}
 
+}
+// TODO - Use a key value store to cache summaries.
 const app = new Hono<{ Bindings: Bindings }>();
 
 app.get('/', async (c) => {
@@ -23,10 +24,7 @@ app.get('/', async (c) => {
 		cloudflareApiToken: c.env.CLOUDFLARE_API_KEY,
 		streaming: true,
 	});
-	// const body = await c.req.json();
-	const body = {
-		"videoUrl" : "https://youtu.be/qaPMdcCqtWk?si=0UXbTlSXda8cLVSi"
-	}
+	const body = await c.req.json();
 	try {
 		const loader = YoutubeLoader.createFromUrl(body.videoUrl);
 		const transcript = await loader.load();
@@ -42,11 +40,6 @@ app.get('/', async (c) => {
 			input_documents: docs,
 			question: "You are an expert in summarizing YouTube videos.Your goal is to create a summary of a video from the transcript provided. Provide a detailed bullet point summary."
 		});
-
-		//{
-		// 			input_documents: docs,
-		// 			question: " You are an expert in summarizing YouTube videos.Your goal is to create a summary of a video from the transcript provided. Provide a detailed summary."
-		// 		}
 
 		return c.json({res});
 	} catch (e) {
